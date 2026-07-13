@@ -22,7 +22,7 @@ echo ""
 
 # Busca de SUID
 echo "[*] 3. Buscando binários com SUID bit ativos:"
-find / \( -path /mnt -o -path /proc -o -path /sys \) -prune -o -type f -perm -4000 -print 2>/dev/null | head -n 15
+find / \( -path /mnt -o -path /proc -o -path /sys \) -prune -o -type f -perm -4000 -exec stat -c "%A (%a) %U:%G - %n" {} \; 2>/dev/null | head -n 15
 echo ""
 
 # Verificaçã de permissão em arquivos críticos
