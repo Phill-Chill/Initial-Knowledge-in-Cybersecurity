@@ -1,6 +1,6 @@
 #!/bin/bash
 
-REDE="192.168.1"
+REDE="xxx.xxx.x"
 ARQUIVO="ips.txt"
 
 > "$ARQUIVO"
