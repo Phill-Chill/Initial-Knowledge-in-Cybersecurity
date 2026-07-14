@@ -41,9 +41,83 @@ Em seguida, apresento na **Tabela 2** a decomposição lógica desse valor:
 
 Em suma, verificamos que esse arquivo possui a permissão de SUID ativada (o programa rodará com os mesmos poderes do seu Dono). O Dono possui poder de Leitura, Escrita e Execução, enquanto o Grupo e os Outros possuem apenas Leitura e Execução.
 
-## 2. Aplicação na Identificação de Vulnerabilidades
+## 1.2. Aplicação na Identificação de Vulnerabilidades
 
 A busca por vulnerabilidades se baseia em mapear como essas permissões interagem. Existem dois vetores principais de ataque explorando o SUID:
 
 1. **Permissão de Escrita Indevida:** A ideia é achar arquivos que possuam SUID ativo e, simultaneamente, permissão de **escrita** para classes além do Dono. Por exemplo, no cenário mais crítico, se a classe `Outros` tiver permissão de escrita, qualquer usuário do sistema poderá apagar o conteúdo do arquivo legítimo, injetar um script malicioso no lugar e executá-lo (rodando como *root*).
 2. **Abuso de Funcionalidade (O mais comum):** Ocorre quando um arquivo tem o SUID ativo, mas é rígido quanto à escrita (apenas o root escreve). A vulnerabilidade surge se esse programa for um utilitário **interativo** (como `python`, `vim`, `bash`, `nmap` ou `find`). O atacante utiliza o comando legítimo do programa para abrir um terminal ou ler um arquivo restrito, abusando do fato de que o processo está temporariamente utilizando o crachá do administrador.
+
+___
+
+## 2. Linux Capabilities
+
+Para resolver o problema inerente ao SUID — onde um arquivo ganha status absoluto de *root* para executar uma tarefa restrita —, o poder do administrador é fragmentado. Essa abordagem concede ao arquivo somente a permissão exata (a *capability*) necessária para realizar uma atividade específica, não sendo mais preciso dar o controle total da máquina a um processo.
+
+Para verificarmos quais *capabilities* estão atribuídas aos arquivos do sistema, podemos utilizar o comando `getcap -r / 2>/dev/null`. Decompondo o comando, temos:
+* `getcap`: Ferramenta que busca e lê as *capabilities* (gravadas nos atributos estendidos).
+* `-r`: Busca recursiva. Faz com que o comando entre em todas as pastas e subpastas a partir da raiz (`/`).
+* `2>`: Redirecionamento da Saída de Erro (*Standard Error*). O descritor `2` captura os avisos de "Acesso Negado" gerados ao tentar ler pastas proibidas.
+* `/dev/null`: O "buraco negro" do Linux. O local de descarte para onde os erros capturados pelo `2>` são enviados, mantendo a tela limpa apenas com os resultados positivos.
+
+Ao executar o comando, o *output* seguirá a seguinte estrutura: 
+`[Caminho do Arquivo] [Nome da Capability] = [Sinalizadores]`
+
+* **Caminho do arquivo:** Onde o programa está fisicamente no disco.
+* **Nome da Capability:** Qual fragmento do poder de *root* foi concedido ao arquivo (se houver mais de um, aparecerão em sequência, separados por vírgula).
+* **Sinalizadores (Flags / Sets):** São as letras logo após o símbolo `=`.
+
+A seguir, na **Figura 2**, o output do comando `getcap`:
+
+**Figura 2 - Output getcap**
+![alt text](assets/linuxCapabilities.png)
+
+### Valores dos Sinalizadores
+As *flags* definem como a *capability* vai operar. Cada arquivo com *capabilities* possuirá ao menos um destes *sets*:
+
+* `p` (Permitted - Permitida): O arquivo tem a permissão para usar aquele fragmento de poder, mas ele não está necessariamente ativo. É necessária uma instrução interna no código do programa para ativá-lo no momento do uso.
+* `e` (Effective - Efetiva): A *capability* já está ativada e pronta para uso desde o início da execução do processo.
+* `i` (Inheritable - Herdável): Se este programa criar ou executar outro programa (um processo filho), o filho herdará essa mesma *capability*.
+
+### Capabilities Críticas na Cibersegurança (Vetores de Ataque)
+
+Embora o Linux possua quase 40 *capabilities* diferentes, a grande maioria delas permite apenas ações de baixo impacto (como alterar o relógio do sistema ou emitir um *ping*). No entanto, para um atacante focado em **Escalonamento de Privilégio**, existem as "Red Flags". 
+
+Se você encontrar um binário interativo (como `python`, `gdb`, `tar`, `vim`) com alguma das *capabilities* abaixo ativada, o sistema tem uma vulnerabilidade crítica.
+
+#### 1. A Tríade da Identidade e Arquivos
+Estas são as chaves mais clássicas e fáceis de explorar, pois lidam diretamente com quem você é e o que você pode acessar.
+* **`CAP_SETUID` e `CAP_SETGID`**: 
+  * **O Perigo:** Permitem que o processo mude livremente o seu UID (User ID) para 0 (root). 
+  * **Ataque:** Se o `python` tiver essa permissão, o atacante roda `python -c 'import os; os.setuid(0); os.system("/bin/sh")'` e ganha um terminal *root* instantâneo.
+* **`CAP_DAC_OVERRIDE` e `CAP_DAC_READ_SEARCH`**: 
+  * **O Perigo:** "DAC" significa o controle de permissões padrão (rwx). Essas chaves simplesmente desligam a checagem de permissão do disco para aquele processo.
+  * **Ataque:** Você pode usar o programa para ler arquivos críticos, como o `/etc/shadow` (onde ficam os *hashes* das senhas), ou sobrescrever o `/etc/passwd` para criar um novo usuário *root*, mesmo não sendo o dono de nenhum desses arquivos.
+
+#### 2. Manipulação de Processos e Kernel
+Estas chaves são extremamente perigosas porque operam em um nível de memória muito baixo, permitindo dominar processos de outros usuários.
+* **`CAP_SYS_PTRACE`**: 
+  * **O Perigo:** Usada originalmente por depuradores (como o `gdb`), permite anexar a execução de um programa a outro processo que já está rodando e inspecionar/modificar sua memória.
+  * **Ataque:** Um invasor pode usar essa *capability* para injetar um *shellcode* malicioso (código de máquina) dentro de um processo que já está rodando como *root* no servidor.
+* **`CAP_SYS_MODULE`**: 
+  * **O Perigo:** Permite carregar e descarregar módulos do próprio Kernel do Linux.
+  * **Ataque:** O atacante compila um *Rootkit* (um malware que se esconde no nível do Kernel) e usa essa *capability* para instalá-lo profundamente no sistema operativo, tornando a infecção praticamente indetectável pelas ferramentas convencionais.
+
+#### 3. A Chave Curinga
+* **`CAP_SYS_ADMIN`**: 
+  * **O Perigo:** É conhecida na comunidade de segurança como o "novo root". Como os desenvolvedores do Linux ao longo dos anos tinham preguiça de criar novas *capabilities* para cada nova funcionalidade do Kernel, eles começaram a jogar tudo dentro da `CAP_SYS_ADMIN`.
+  * **Ataque:** Ela tem dezenas de poderes implícitos. O mais perigoso no contexto de escalonamento é a capacidade de montar e desmontar sistemas de arquivos. Um atacante pode montar um disco falso, acessar recursos isolados ou modificar o comportamento base do sistema operativo.
+
+#### 4. O Vetor de Rede (Lateralidade)
+* **`CAP_NET_RAW` e `CAP_NET_ADMIN`**:
+  * **O Perigo:** Controle sobre os pacotes de dados.
+  * **Ataque:** Embora nem sempre forneça um terminal *root* direto, permite que o atacante coloque a placa de rede em modo promíscuo (*sniffing*), capturando tráfego, senhas não criptografadas e *tokens* da rede interna da empresa, abrindo caminho para o movimento lateral para outras máquinas mais importantes.
+
+### Coexistência e Vulnerabilidades (SUID vs. Capabilities)
+Pode-se entender que as *capabilities* são mais seguras que a atribuição de SUID, visto que aplicam o princípio do privilégio mínimo (dando apenas o necessário). 
+
+Teoricamente, seria ideal substituir todo o uso de SUID por *capabilities*. Na prática, essa substituição demandaria a refatoração de grande parte do ecossistema legado do Unix/Linux. Por isso, **ambos os sistemas são utilizados simultaneamente**. 
+
+Isso abre uma grande margem de vulnerabilidade, pois são sistemas de permissão independentes. Um arquivo vulnerável pode possuir SUID (sem *capabilities* críticas) ou possuir uma *capability* crítica (sem SUID), e apenas um deles configurado de forma incorreta é suficiente para o atacante escalar privilégios.
+
+Um caso de estudo interessante ocorre quando o atacante encontra um arquivo com SUID, executa um *exploit* , e mesmo assim a escalada de privilégio falha. Isso geralmente ocorre porque o ambiente/SO está conteinerizado (operando com um filtro de bloqueio). Vamos trabalhar esse cenário logo adiante no tópico de **Docker Breakout**.
