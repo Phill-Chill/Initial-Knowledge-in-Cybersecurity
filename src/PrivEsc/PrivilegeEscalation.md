@@ -121,3 +121,86 @@ Teoricamente, seria ideal substituir todo o uso de SUID por *capabilities*. Na p
 Isso abre uma grande margem de vulnerabilidade, pois são sistemas de permissão independentes. Um arquivo vulnerável pode possuir SUID (sem *capabilities* críticas) ou possuir uma *capability* crítica (sem SUID), e apenas um deles configurado de forma incorreta é suficiente para o atacante escalar privilégios.
 
 Um caso de estudo interessante ocorre quando o atacante encontra um arquivo com SUID, executa um *exploit* , e mesmo assim a escalada de privilégio falha. Isso geralmente ocorre porque o ambiente/SO está conteinerizado (operando com um filtro de bloqueio). Vamos trabalhar esse cenário logo adiante no tópico de **Docker Breakout**.
+
+## 3. Docker Breakout
+Primieiramente vamos entender a diferença entre `Máquina Virtual` (VM) e `Docker`. A VM é a virtualização do hardware, já o Docker é virtualização a nível de SO, o kernel e compartilhado. O contâiner é criado a partir de três coisas:
+
+* **Namespace**: é os limites desse container. Aqui será definido:
+    * **PID (Process ID):** Isola a árvore de processos. O contêiner ganha seu próprio conjunto de IDs de processo, de modo que o processo com PID 1 dentro do contêiner seja diferente daquele no host.
+    
+    * **NET (Network):** Fornece uma pilha de rede isolada. Isso permite que o contêiner tenha suas próprias interfaces de rede (como eth0), portas e endereços IP, sem conflito com o host ou outros contêineres.
+    
+    * **MNT (Mount):** Isola os pontos de montagem e o sistema de arquivos. Cada contêiner vê apenas a sua própria estrutura de diretórios.
+    
+    * **UTS:** Permite que o contêiner possua seu próprio hostname e domínio, independentes do sistema operacional hospedeiro.
+
+    * **IPC (Inter-Process Communication):** Isola os recursos de comunicação entre processos, como filas de mensagens e memória compartilhada, evitando que os dados se misturem.
+    
+    * **USER:** Isola o mapeamento de usuários e grupos. Permite que um processo rode como root dentro do contêiner, mas tenha privilégios de um usuário comum no host, garantindo maior segurança.
+
+* **Cgroups**: Isolam o que o processo pode gastar (limite de RAM e CPU)
+
+* **Filtro de capabilities**: O Docker retira a maiora dos capabilities que vimos no tópico anterior
+
+Em suma, é comum ao invadir um container o invasor se torne o dono do "quarto" e não da máquina em si. Contudo para isso, temos que achar uma brecha com acesso à maquina de fato.
+
+### Técinas de fuga do container
+
+#### 1. Escalonamento de privilégio através de má-configuração
+
+Nesta primeira técnica, buscaremos contêineres com execução privilegiada (`--privileged`), o que devolve as *capabilities* para o ambiente. O ataque consiste em listar e montar os discos físicos do servidor diretamente dentro do contêiner. Podem-se utilizar os seguintes comandos:
+
+```bash
+# 1. Verifica se você consegue ver os discos físicos da máquina host (ex: /dev/sda1 ou /dev/vda1)
+fdisk -l
+
+# 2. Cria uma pasta temporária dentro do seu contêiner
+mkdir /mnt/servidor_real
+
+# 3. Monta o disco físico real do Host nessa pasta temporária
+mount /dev/sda1 /mnt/servidor_real
+
+# 4. Muda o diretório raiz do seu terminal para a pasta montada
+chroot /mnt/servidor_real bash
+```
+
+Mas afinal, como sabemos se estamos em um contêiner privilegiado? Se os comandos acima tiveram sucesso, a resposta é sim. O ambiente será identificado como privilegiado justamente se as ferramentas que acessam o hardware do servidor puderem ser executadas sem erros de permissão. 
+
+Como a ferramenta `getcap` não funciona neste cenário (pois ela lê os atributos de arquivos no disco, e o privilégio do Docker é injetado diretamente na memória do processo), utilizamos outras técnicas de enumeração de ambiente:
+
+1. **O Teste Visual (`ls /dev`):** Em um contêiner restrito, a pasta `/dev` (onde ficam os arquivos de bloco de hardware) é quase vazia. Em um contêiner privilegiado, o Docker permite que você veja todos os dispositivos físicos do servidor. Se ao listar a pasta você visualizar discos como `sda1`, `vda1` ou `nvme0n1`, o contêiner possui privilégios.
+
+2. **Leitura direta do status do processo no Kernel:** Podemos extrair informações detalhadas sobre as permissões do processo que roda o nosso terminal dentro do contêiner utilizando o comando:
+```bash
+    # cat: comando para exibir o texto de um arquivo no terminal
+    # /proc/ (process): pseudo-sistema de arquivos virtuais em RAM com dados dos processos
+    # /self/: atalho que entra automaticamente no diretório do PID do processo atual
+    # grep: comando de filtragem, no caso, exibe apenas as linhas que contêm "Cap"
+    
+    cat /proc/self/status | grep Cap
+```
+A **Figura 3** mostra a saída do comando acima. As linhas representam:
+* **CapPrm (Permitted - Permitida):** `0000000000000000`
+* **CapEff (Effective - Efetiva):** `0000000000000000`
+* **CapInh (Inheritable - Herdável):** `0000000000000000`
+* **CapAmb (Ambient - Ambiente):** `0000000000000000`
+
+**Figura 3 - Output do cat /proc/self/status**
+![alt text](assets/procCapabilitiesInfo.png)
+
+Essas quatro primeiras linhas estão zeradas porque o comando foi executado como um usuário comum, sem poderes ativados no momento.
+
+Agora, a linha mais importante para a enumeração é a **`CapBnd` (Bounding Set - Conjunto Limite)**. Ela exibe o limite máximo de *capabilities* que este ambiente permite acessar. Atualmente, o Linux mapeia 41 *capabilities*. Fazendo a conversão, os dez caracteres `f` hexadecimais representam 40 *capabilities* (4 bits cada), e o número `1` representa a 41ª. Os cinco `0`s (zeros) sobrando à esquerda são apenas espaços reservados na arquitetura de 64 bits para futuras *capabilities* que vierem a ser adicionadas ao Kernel. Se essa linha estiver preenchida com essa máscara máxima (`000001ffffffffff`), significa que o Docker não impôs filtros de segurança.
+
+3. **Tradução das Capabilities do Processo:**
+O comando anterior nos mostra o conjunto em formato hexadecimal cru. Para listar e ler os nomes literais das *capabilities* anexadas ao processo de forma humana, utilizamos a ferramenta *Capability Shell*:
+```bash
+capsh --print
+```
+
+A **Figura 4** abaixo ilustra a saída deste comando, evidenciando as chaves que temos à disposição:
+
+**Figura 4 - Output do capsh --print**
+![alt text](assets/cpashDetermineCapBnd.png)
+
+> **Nota de Estudo:** Criarei um documento separado (`.md`) no diretório `/architecture/` referente à estrutura base de diretórios do Unix/Linux. Nele, irei aprofundar os estudos sobre o pseudo-sistema de arquivos `/proc` e outros diretórios fundamentais do sistema operacional.
