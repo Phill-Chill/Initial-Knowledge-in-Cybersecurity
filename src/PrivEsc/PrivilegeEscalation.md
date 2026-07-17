@@ -204,3 +204,5 @@ A **Figura 4** abaixo ilustra a saída deste comando, evidenciando as chaves que
 ![alt text](assets/cpashDetermineCapBnd.png)
 
 > **Nota de Estudo:** Criarei um documento separado (`.md`) no diretório `/architecture/` referente à estrutura base de diretórios do Unix/Linux. Nele, irei aprofundar os estudos sobre o pseudo-sistema de arquivos `/proc` e outros diretórios fundamentais do sistema operacional.
+
+#### 2. 
