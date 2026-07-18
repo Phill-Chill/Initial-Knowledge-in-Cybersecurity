@@ -42,5 +42,12 @@ cat /etc/crontab 2>/dev/null
 ls -la /etc/cron.d/ 2>/dev/null
 echo""
 
+# Log bash do usuário
+echo "[*] Histórico bash do usuário"
+echo "Digite a palavra para filtrar o histórico do usuário:"
+read filtro
+grep -i "$filtro" ~/.bash_history
+echo ""
+
 echo "Enumeração concluída!"
 echo ""
