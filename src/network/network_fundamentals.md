@@ -72,3 +72,25 @@ Durante a fase de enumeração, encontrar estas portas abertas é o principal ob
 | **161** | UDP | **SNMP** | Gerenciamento de rede. Pode vazar a topologia da rede inteira se estiver mal configurado. |
 | **3306** | TCP | **MySQL / MariaDB** | Banco de dados. Alvo direto para extração de informações sensíveis. |
 
+### 3.4 Serviços invisíveis - DHCP e DNS
+São ditos serviços invisíveis por não necessitarem da interação do usuário.
+
+#### 3.4.1 Dynamic Host Configuration Protocol (DHCP)
+Esse protocolo é responsável por atribuir um endereço IP a um dispositivo que deseja conectar à rede pelo processo DORA:
+* **Processo DORA**: são quatro etapas sequenciais que dão o nome DORA (cada letra representa uma etapa):
+    * **Discover - D:** O dispositivo realiza o **broadcast** perguntando se existe algum servidor DHCP disponível;
+    * **Offer - O:** O servidor DHCP recebe o chamado e responde com uma proposta de endereço IP disponível;
+    * **Request - R:** O dispositivo aceita formalmente a proposta do IP, informando seu aceite;
+    * **Acknowledge - A:** O servidor DHCP finaliza o processo registrando na **Tabela de Leases (Concessões DHCP)**, que é uma lista de IPs em uso.
+
+* **Resultado do processo DORA:** Após a conclusão de todas as etapas, o DHCP entrega as seguintes definições de rede:
+    * **Endereço IP**;
+    * **Máscara de Sub-rede**;
+    * **Gateway Padrão:** O endereço do roteador. Qualquer pacote que vá para fora da rede tem que ser enviado para esse endereço;
+    * **Servidor DNS:** Um ou mais IPs que vão fazer a tradução de nomes para números;
+    * **Lease Time:** O prazo de validade desse IP. Ele será renovado em segundo plano antes de vencer.
+
+##### 3.4.1.1 Visão Cyber
+Como o DHCP não exige autenticação, ele pode sofrer com dois ataques:
+* **DHCP Starvation:** O atacante gera vários MACs para pedir IPs ao servidor DHCP até esgotar todos os disponíveis;
+* **Rogue DHCP:** Após esgotar os IPs originais, o atacante sobe o próprio servidor DHCP falso na rede. Quando o usuário entra na rede, o DHCP do atacante responde mais rápido e retorna configurações de rede maliciosas, como `Gateway e DNS maliciosos`.
