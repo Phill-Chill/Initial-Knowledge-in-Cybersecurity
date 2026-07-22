@@ -14,7 +14,7 @@ O Wi-Fi transmite dados através de ondas de rádio omnidirecionais (emite e cap
     * **Software:** Navegadores (HTTPS/TLS) aplicam a criptografia de ponta a ponta na aplicação.
     * **Hardware:** Protocolos como WPA2/WPA3 utilizam a placa de rede do dispositivo para criptografar o trajeto físico até o roteador.
 
-### 1.2 A Matemática do Wi-Fi (WPA2)
+### 1.1.1 Processo WPA2
 No WPA2, a senha da rede não é usada diretamente para criptografar o tráfego. Ela é usada para calcular uma chave fixa chamada `Pairwise Master Key` (PMK). Essa PMK é o ingrediente base para o processo de **4-Way Handshake**, que cria uma chave exclusiva para a sessão do usuário:
 
 * **1. Roteador -> Cliente:** Quando há uma solicitação de conexão, o roteador fornece um número aleatório em texto claro (ANonce - *Authenticator Nonce*).
@@ -29,3 +29,18 @@ Nesse processo, nota-se um problema: grande parte das informações utilizadas p
 * **A Senha (A peça que falta):** Com os MACs e Nonces em mãos, o atacante tem dois caminhos:
     * **Redes Públicas (Cafeterias):** A senha já é conhecida. O atacante pega a senha da parede, junta com os dados interceptados, calcula a PTK do alvo silenciosamente e passa a ler todo o tráfego local da vítima.
     * **Redes Privadas:** O atacante não tem a senha. Ele leva o Handshake capturado para casa e executa um ataque de Força Bruta Offline (usando dicionários). O computador dele chuta milhares de senhas por segundo, cruza com os Nonces, e checa qual delas gera o mesmo `MIC` capturado na Mensagem 2.
+
+## 1.2 Cabo
+Nas conexões cabeadas as transmissões de dados são fisicamente isoladas por um equipamento chamado **Switch** que cria um túnel direto entre o computador e o roteador. Como não podemos utilizar o ataque **promíscuo**, partimos para o **Man-in-the-Middle (MitM)** utilizando o ARP.
+
+### 1.2.1 O que é o Address Resolution Protocol (ARP)
+Sua função é descobrir o endereço MAC do dispositivo quando se sabe só o lógico (IP). Ele é utilizado, pois o **Switch** e os cabos utilizam do MAC para identificação do aparelho.
+
+### 1.2.2 Como funciona o ARP
+Os computadores possuem uma memória interna chamada **Tabela ARP** (ou Cache ARP). É uma lista que armazena: "O IP X pertence ao MAC Y". Quando a tabela está vazia o computador envia para o **Switch** um *request* em Broadcast (um grito para todos na rede) do MAC do roteador passando o seu IP, após recebido pelo roteador ele retorna seu MAC e o computador anota na tabela os dois dados.
+
+### 1.2.3 Falha do ARP
+Esse protocolo foi criado nos anos 80, período que ataques cibernéticos eram muito nichados. Por causa disso, o ARP "acredita" em qualquer dado recebido, então se eu passar a seguinte afirmação: "Meu ip é X e mac Y" ele reescreve na tabela ARP na linha correspondente a esse IP, se já existir. Isso acaba dando origem ao ataque `MitM`.
+
+### 1.2.4 Man-in-the-Middle (MitM)
+O atacante aproveita dessa confiança e para fazer um intermédio entre o alvo e o roteador ele passa para o alvo o ip do roteador com o MAC do seu PC para o alvo e o ip da vítima com o MAC do seu PC para o roteador.
