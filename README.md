@@ -1,3 +1,17 @@
+# Disclaimer
+
+## DHCP Server
+
+This code was developed **strictly for educational and academic research purposes**, with the goal of deeply understanding the mechanics of the DHCP protocol, socket manipulation in C++, and network vulnerability analysis (Rogue DHCP).
+
+* Do not use this code on corporate, public, or third-party networks without explicit written authorization.
+
+* The interception or manipulation of network traffic without consent is illegal and constitutes a cybercrime.
+
+* The author of this repository is not responsible for any damage, service downtime, or misuse caused by compiling and executing this code.
+
+By using this repository, you agree to conduct your tests solely in a controlled environment (Virtual Lab or your own isolated local network).
+
 # Initial Knowledge in Cybersecurity
 
 This repository documents my first steps, studies, and practical tools focused on Cybersecurity, Automation, and Networking. The goal is to understand the fundamentals of operating systems and network protocols by building security tools from scratch.
