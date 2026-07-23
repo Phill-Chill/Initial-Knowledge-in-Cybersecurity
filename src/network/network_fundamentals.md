@@ -77,6 +77,14 @@ São ditos serviços invisíveis por não necessitarem da interação do usuári
 
 #### 3.4.1 Dynamic Host Configuration Protocol (DHCP)
 Esse protocolo é responsável por atribuir um endereço IP a um dispositivo que deseja conectar à rede pelo processo DORA:
+* **Cabeçalho de pacote:** Esse pacote contem informações do dispositivo que solicitou a conexão ao DHCP:
+    * **Hardware Type:** Define a tecnologia de rede. Existe um tabela com atribuição de um número para cada tipo feita pela ` [Internet Assigned Numbers Authority (IANA)](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml) `, mas majoritariamente é utilizado o tipo 1 que representa o `Ethernet` (Wi-Fi e cabo).
+    * **Hardware Length:** Define o tamanho do endereço MAC;
+    * **Client Hardware Address:**  O MAC Address em si.
+    * **Trasanction ID:** Um númenor aleatório gerado pelo dispositivo para identifica-lo em meio a outros processos DORA.
+    * **Magic Cookie:** É um indicativo de que esse pacote possui opções DHCP a partir dessa marcação;
+    * **Type, Length e Value (TLV):** Logo após o `Magic Cookie`, os dados dinâmicos são organizados em um formato de blocos enfileirados, onde cada configuração possui três partes: Type (um código do tipo de opção, ex: 1 = Máscara, 6 = DNS, 53 = Message Type) - 1 byte, Length (diz exatamente quantos bytes o valor daquela opção vai ocupar) - 1 byte e o Value (o dado bruto em si, como o número do IP)- tamanho dinâmico. Esse formato permite adicionar opções sem quebrar a leitura de clientes mais antigos.
+
 * **Processo DORA**: são quatro etapas sequenciais que dão o nome DORA (cada letra representa uma etapa):
     * **Discover - D:** O dispositivo realiza o **broadcast** perguntando se existe algum servidor DHCP disponível;
     * **Offer - O:** O servidor DHCP recebe o chamado e responde com uma proposta de endereço IP disponível;
@@ -94,3 +102,9 @@ Esse protocolo é responsável por atribuir um endereço IP a um dispositivo que
 Como o DHCP não exige autenticação, ele pode sofrer com dois ataques:
 * **DHCP Starvation:** O atacante gera vários MACs para pedir IPs ao servidor DHCP até esgotar todos os disponíveis;
 * **Rogue DHCP:** Após esgotar os IPs originais, o atacante sobe o próprio servidor DHCP falso na rede. Quando o usuário entra na rede, o DHCP do atacante responde mais rápido e retorna configurações de rede maliciosas, como `Gateway e DNS maliciosos`.
+
+#### 3.5 Domain Name System (DNS)
+O servidor DNS é responsável pela tradução do domínio de um site para seu respectivo endereço IP
+
+##### 3.5.1 Visão Cyber
+* **DNS Spoofing (Falsificação de DNS):** 
